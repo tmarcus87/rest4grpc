@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gogo/protobuf/jsonpb"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 	"github.com/jhump/protoreflect/dynamic/grpcdynamic"
 	"github.com/jhump/protoreflect/grpcreflect"
 	"github.com/tmarcus87/rest4grpc/logger"
+	"github.com/tmarcus87/rest4grpc/message"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
 	"go.uber.org/zap"
@@ -18,7 +18,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	reflection "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 	"google.golang.org/grpc/status"
-	"io"
 	"net/url"
 	"strings"
 )
@@ -73,7 +72,7 @@ func NewDynamicGrpcClient(target string) (*DynamicGrpcClient, error) {
 	return &client, nil
 }
 
-func (c *DynamicGrpcClient) Invoke(ctx context.Context, service, method string, req io.Reader) ([]byte, error) {
+func (c *DynamicGrpcClient) Invoke(ctx context.Context, service, method string, msg message.Message) ([]byte, error) {
 	mtd, err := c.getMethodDesc(ctx, service, method)
 	if err != nil {
 		return nil, err
@@ -81,7 +80,7 @@ func (c *DynamicGrpcClient) Invoke(ctx context.Context, service, method string, 
 
 	mf := dynamic.NewMessageFactoryWithDefaults()
 	reqMsg := mf.NewMessage(mtd.GetInputType())
-	if err := jsonpb.Unmarshal(req, reqMsg); err != nil {
+	if err := msg.Apply(reqMsg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal : %w", err)
 	}
 

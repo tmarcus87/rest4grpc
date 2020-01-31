@@ -3,7 +3,9 @@ package server
 import (
 	"github.com/tmarcus87/rest4grpc/grpc"
 	"github.com/tmarcus87/rest4grpc/logger"
+	"github.com/tmarcus87/rest4grpc/message"
 	"go.uber.org/zap"
+	"io/ioutil"
 	"net/http"
 	"path"
 	"strings"
@@ -57,19 +59,32 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	service, method := path.Split(r.URL.Path)
 	service = strings.TrimSuffix(strings.TrimPrefix(service, "/"), "/")
 	if service == "" || method == "" {
-		ctx.Response(http.StatusNotFound, "Not found")
+		ctx.Send(http.StatusNotFound, "Not found")
 		return
 	}
 	service = service[1:]
 
+	var msg message.Message
+	if r.Method == http.MethodPost {
+		bytes, err := ioutil.ReadAll(ctx.request.Body)
+		if err != nil {
+			ctx.Response(http.StatusInternalServerError, err.Error())
+			return
+		}
+		msg = message.NewJsonMessage(bytes)
+	} else {
+		ctx.Send(http.StatusNotImplemented, "Not yet implemented")
+		return
+	}
+
 	// Invoke gRPC
-	bytes, err := h.client.Invoke(ctx, service, method, ctx.request.Body)
+	bytes, err := h.client.Invoke(ctx, service, method, msg)
 	if err != nil {
 		if err == grpc.MethodDescriptorNotFound {
-			ctx.Response(http.StatusNotFound, "Method not found")
+			ctx.Send(http.StatusNotFound, "Method not found")
 		}
 		ctx.Response(http.StatusInternalServerError, err)
 		return
 	}
-	ctx.Response(http.StatusOK, bytes)
+	ctx.Send(http.StatusOK, bytes)
 }
