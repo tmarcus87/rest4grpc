@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package pb;
+
+import "google/protobuf/empty.proto";
+
+service TestService {
+
+    rpc Live(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    }
+
+    rpc MethodA(ParamA) returns (ResponseA) {
+    }
+
+    rpc MethodB(ParamB) returns (ResponseB) {
+    }
+
+}
+
+message ParamA {
+    string name = 1;
+    int32 age = 2;
+}
+
+message ResponseA {
+    string trace_id = 1;
+    string parent_span_id  = 2;
+
+    string name = 11;
+    int32 age = 12;
+}
+
+message ParamB {
+    string name = 1;
+    string address = 2;
+}
+
+message ResponseB {
+    string trace_id = 1;
+    string parent_span_id  = 2;
+
+    string name = 11;
+    string address = 12;
+}
