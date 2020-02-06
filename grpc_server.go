@@ -39,49 +39,61 @@ func (s *GrpcServer) Start(port uint16) error {
 		return err
 	}
 
-	errCh := make(chan error)
-	ready := errors.New("ok")
-
-	go func() {
-		errCh <- s.native.Serve(listener)
-	}()
-
-	go func() {
-		cc, err := grpc.Dial(fmt.Sprintf("localhost:%d", port), grpc.WithInsecure())
-		if err != nil {
-			errCh <- err
-		}
-
-		c := pb.NewTestServiceClient(cc)
-		for {
-			err := func() error {
-				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-				defer cancel()
-				if _, err := c.Live(ctx, &empty.Empty{}); err != nil {
-
-				}
-				return err
-			}()
-			if err == nil {
-				errCh <- ready
-				break
-			} else {
-				logger.Info("Not yet ready")
+	return s.serveAndWait(
+		func() error {
+			return s.native.Serve(listener)
+		},
+		func() bool {
+			cc, err := grpc.Dial(fmt.Sprintf("localhost:%d", port), grpc.WithInsecure())
+			if err != nil {
+				return false
 			}
+
+			c := pb.NewTestServiceClient(cc)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			if _, err := c.Live(ctx, &empty.Empty{}); err != nil {
+				return false
+			}
+
+			return true
+		},
+		5*time.Second,
+		100*time.Millisecond)
+}
+
+func (s *GrpcServer) serveAndWait(
+	serveFn func() error,
+	watchFn func() bool,
+	watchTimeout time.Duration,
+	watchInterval time.Duration) error {
+
+	var (
+		errCh = make(chan error)
+		ready = errors.New("ok")
+	)
+
+	go func() {
+		errCh <- serveFn()
+	}()
+
+	go func() {
+		for {
+			if watchFn() {
+				errCh <- ready
+			}
+			time.Sleep(watchInterval)
 		}
 	}()
 
-	timeout := 5 * time.Second
-	interval := 100 * time.Millisecond
-
-	for i := 0; i < int(timeout/interval); i++ {
+	for i := 0; i < int(watchTimeout/watchInterval); i++ {
 		select {
-		case err = <-errCh:
+		case err := <-errCh:
 			if err == ready {
 				return nil
 			}
 			return err
-		case <-time.After(interval):
+		case <-time.After(watchInterval):
 			// Do nothing
 		}
 	}

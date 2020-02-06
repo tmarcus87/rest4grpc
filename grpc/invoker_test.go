@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/tidwall/gjson"
 	"github.com/tmarcus87/rest4grpc"
+	"github.com/tmarcus87/rest4grpc/message"
 	"go.opencensus.io/trace"
-	"strings"
 	"testing"
 )
 
@@ -29,7 +29,9 @@ func TestDynamicGrpcClient_Invoke(t *testing.T) {
 
 	traceID := span.SpanContext().TraceID.String()
 
-	res, err := client.Invoke(ctx, "pb.TestService", "MethodA", strings.NewReader(`{"name": "name", "age": 20}`))
+	msg := message.NewJsonMessage([]byte(`{"name": "name", "age": 20}`))
+
+	res, err := client.Invoke(ctx, "pb.TestService", "MethodA", msg)
 	if err != nil {
 		panic(err)
 	}

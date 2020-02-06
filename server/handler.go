@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/joncalhoun/qson"
 	"github.com/tmarcus87/rest4grpc/grpc"
 	"github.com/tmarcus87/rest4grpc/logger"
 	"github.com/tmarcus87/rest4grpc/message"
@@ -65,15 +66,29 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	service = service[1:]
 
 	var msg message.Message
-	if r.Method == http.MethodPost {
+	switch m := r.Method; m {
+	case http.MethodPost:
 		bytes, err := ioutil.ReadAll(ctx.request.Body)
 		if err != nil {
+			logger.FromContext(ctx).Warn("Failed to read client body", zap.Error(err))
 			ctx.Response(http.StatusInternalServerError, err.Error())
 			return
 		}
 		msg = message.NewJsonMessage(bytes)
-	} else {
-		ctx.Send(http.StatusNotImplemented, "Not yet implemented")
+		break
+
+	case http.MethodGet:
+		bytes, err := qson.ToJSON(ctx.request.URL.RawQuery)
+		if err != nil {
+			logger.FromContext(ctx).Debug("Failed to parse query", zap.Error(err))
+			ctx.Response(http.StatusBadRequest, "Failed to parse query")
+			return
+		}
+		msg = message.NewJsonMessage(bytes)
+		break
+
+	default:
+		ctx.Send(http.StatusUnsupportedMediaType, "Method("+m+") is supported")
 		return
 	}
 
