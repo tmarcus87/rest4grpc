@@ -6,35 +6,35 @@ import (
 	"github.com/tmarcus87/rest4grpc/logger"
 	"github.com/tmarcus87/rest4grpc/message"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"io/ioutil"
 	"net/http"
 	"path"
 	"strings"
 )
 
-//var (
-//	code2status = make(map[codes.Code]int)
-//)
-//
-//func init() {
-//	code2status[codes.OK] = http.StatusOK
-//	//code2status[codes.Canceled] = http.Status
-//	code2status[codes.Unknown] = http.StatusInternalServerError
-//	code2status[codes.InvalidArgument] = http.StatusBadRequest
-//	//code2status[codes.DeadlineExceeded] = http.Status
-//	code2status[codes.NotFound] = http.StatusNotFound
-//	code2status[codes.AlreadyExists] = http.StatusConflict
-//	code2status[codes.PermissionDenied] = http.StatusForbidden
-//	code2status[codes.ResourceExhausted] = http.StatusForbidden
-//	code2status[codes.FailedPrecondition] = http.StatusPreconditionFailed
-//	code2status[codes.Aborted] = http.StatusInternalServerError
-//	//code2status[codes.OutOfRange] = http.Status
-//	code2status[codes.Unimplemented] = http.StatusForbidden
-//	code2status[codes.Internal] = http.StatusInternalServerError
-//	code2status[codes.Unavailable] = http.StatusServiceUnavailable
-//	//code2status[codes.DataLoss] = http.StatusInternalServerError
-//	code2status[codes.Unauthenticated] = http.StatusUnauthorized
-//}
+var (
+	code2status = map[codes.Code]int{
+		codes.OK:                 http.StatusOK,
+		codes.Canceled:           499, // ClientClosedRequest
+		codes.Unknown:            http.StatusInternalServerError,
+		codes.InvalidArgument:    http.StatusBadRequest,
+		codes.DeadlineExceeded:   http.StatusGatewayTimeout,
+		codes.NotFound:           http.StatusNotFound,
+		codes.AlreadyExists:      http.StatusConflict,
+		codes.PermissionDenied:   http.StatusForbidden,
+		codes.ResourceExhausted:  http.StatusTooManyRequests,
+		codes.FailedPrecondition: http.StatusBadRequest,
+		codes.Aborted:            http.StatusConflict,
+		codes.OutOfRange:         http.StatusBadRequest,
+		codes.Unimplemented:      http.StatusNotImplemented,
+		codes.Internal:           http.StatusInternalServerError,
+		codes.Unavailable:        http.StatusServiceUnavailable,
+		codes.DataLoss:           http.StatusInternalServerError,
+		codes.Unauthenticated:    http.StatusUnauthorized,
+	}
+)
 
 type ProxyHandler struct {
 	client           *grpc.DynamicGrpcClient
@@ -69,6 +69,7 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch m := r.Method; m {
 	case http.MethodPost:
 		bytes, err := ioutil.ReadAll(ctx.request.Body)
+		defer ctx.request.Body.Close()
 		if err != nil {
 			logger.FromContext(ctx).Warn("Failed to read client body", zap.Error(err))
 			ctx.Response(http.StatusInternalServerError, err.Error())
@@ -97,8 +98,16 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if err == grpc.MethodDescriptorNotFound {
 			ctx.Send(http.StatusNotFound, "Method not found")
+			return
 		}
-		ctx.Response(http.StatusInternalServerError, err)
+
+		// Response status conversion of gRPC to http
+		hs := http.StatusInternalServerError
+		if gs, ok := status.FromError(err); ok {
+			hs = code2status[gs.Code()]
+		}
+
+		ctx.Response(hs, err)
 		return
 	}
 	ctx.Send(http.StatusOK, bytes)
