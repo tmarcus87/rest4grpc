@@ -16,3 +16,18 @@ tty2 $ curl -X POST -d '{"hoge":"fuga"}' http://localhost:8888/hoge.fuga.TestSer
 ```
 
 For more information `$ r4g -help`
+
+## Development
+
+**Compile pb file**
+
+```bash
+$ cd path/to/checkout
+$ docker run --rm \
+  -v `pwd`/pb:/go/src/proto \
+  -w /go/src/proto \
+  namely/protoc-all \
+  -f test.proto \
+  -l go \
+  -o /go/src/proto
+```
